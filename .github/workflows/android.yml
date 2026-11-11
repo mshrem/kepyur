@@ -26,6 +26,47 @@ jobs:
           git submodule update --init third_party/libusb third_party/wifi-sdr
           git -C third_party/wifi-sdr submodule update --init external/devourer
 
+      # Enable this RTL8812BU board in the Android discovery UI and the native
+      # wifi-sdr submodule, without changing the upstream project's gitlink.
+      - name: Enable TP-Link Archer T3U (2357:012D)
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(filename, before, after):
+              path = Path(filename)
+              data = path.read_text(encoding="utf-8")
+              count = data.count(before)
+              if count != 1:
+                  raise RuntimeError(f"{filename}: expected 1 match, got {count}")
+              path.write_text(data.replace(before, after, 1), encoding="utf-8")
+              print(f"T3U compatibility enabled in {filename}")
+
+          # Android USB attach filter uses decimal values: 0x2357=9047, 0x012D=301.
+          replace_once(
+              "android/app/src/main/res/xml/device_filter.xml",
+              '    <!-- Realtek RTL8812BU -->',
+              '    <!-- TP-Link Archer T3U (RTL8812BU; 2357:012D) -->\n'
+              '    <usb-device vendor-id="9047" product-id="301" />\n'
+              '    <!-- Realtek RTL8812BU -->',
+          )
+
+          # Permission and USB-device discovery in the Android app.
+          replace_once(
+              "android/app/src/main/java/com/kepyur/app/MainActivity.kt",
+              '(d.vendorId == 0x2357 && d.productId == 0x0115) ||',
+              '(d.vendorId == 0x2357 && (d.productId == 0x0115 || d.productId == 0x012d)) ||',
+          )
+
+          # Map the T3U USB ID to the same RTL8812BU radio as the T4U v3.
+          replace_once(
+              "third_party/wifi-sdr/src/receiver.h",
+              'if (vid == 0x2357 && pid == 0x0115) // TP-Link Archer T4U v3 (RTL8812BU)',
+              'if (vid == 0x2357 && (pid == 0x0115 || pid == 0x012d)) '
+              '// TP-Link Archer T4U v3 / T3U (RTL8812BU)',
+          )
+          PY
+
       - uses: cachix/install-nix-action@v31
 
       - uses: actions/cache@v4
@@ -51,8 +92,8 @@ jobs:
             echo
             git log -1 --format='%s'
             echo
-            echo "Rolling build, replaced on every push to main. Install: \`adb install -r kepyur-main.apk\`."
+            echo "T3U experimental support for USB 2357:012D. Rolling build; install: \`adb install -r kepyur-main.apk\`."
           } > notes.md
           gh release delete main-latest --yes --cleanup-tag || true
           gh release create main-latest kepyur-main.apk --prerelease --target "$GITHUB_SHA" \
-            --title "main (${short})" --notes-file notes.md
+            --title "main T3U (${short})" --notes-file notes.md
