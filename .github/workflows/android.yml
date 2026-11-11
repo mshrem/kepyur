@@ -81,6 +81,15 @@ jobs:
       - name: Build
         run: nix-shell --run scripts/build-android.sh
 
+      # Keep a downloadable APK even if the release step is blocked by fork permissions.
+      - name: Upload T3U test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kepyur-t3u-test-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Publish the main release
         env:
           GH_TOKEN: ${{ github.token }}
