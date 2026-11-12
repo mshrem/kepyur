@@ -5,6 +5,19 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=$ROOT/build/web
 export EM_CACHE=${EM_CACHE:-$OUT/emcache}
+
+# Keep the pinned wifi-sdr submodule unchanged in Git history while enabling
+# the T3U (2357:012D) as an RTL8822B alias for this web-only build.
+MODEL="$ROOT/third_party/wifi-sdr/src/receiver.h"
+if ! grep -q 'pid == 0x012d' "$MODEL"; then
+  if ! grep -q 'vid == 0x2357 && pid == 0x0115' "$MODEL"; then
+    echo "T3U support: wifi-sdr model_pid changed upstream; stop for review" >&2
+    exit 1
+  fi
+  sed -i 's/vid == 0x2357 && pid == 0x0115/vid == 0x2357 \&\& (pid == 0x0115 || pid == 0x012d)/' "$MODEL"
+fi
+grep -q 'pid == 0x012d' "$MODEL"
+
 tool() { command -v "${KEPYUR_MIPS_PREFIX:-mipsel-unknown-linux-gnu-}$1" || command -v "mipsel-linux-gnu-$1"; }
 
 emcmake cmake -S "$ROOT/web/libusb" -B "$OUT/libusb" -G Ninja -DCMAKE_BUILD_TYPE=Release \
