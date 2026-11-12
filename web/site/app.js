@@ -4,7 +4,7 @@ import { BUILD } from './build.js';
 
 const $ = (id) => document.getElementById(id);
 const DEBUG = new URLSearchParams(location.search).has('debug');
-const ADAPTERS = [{ vendorId: 0x2357, productId: 0x0115 }, { vendorId: 0x0bda, productId: 0xb812 }]; // T4U v3, 8812BU
+const ADAPTERS = [{ vendorId: 0x2357, productId: 0x012d }, { vendorId: 0x2357, productId: 0x0115 }, { vendorId: 0x0bda, productId: 0xb812 }]; // T3U, T4U v3, Realtek 8812BU
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const now = () => performance.timeOrigin + performance.now(); // epoch ms, the clock the wasm side stamps with
 
@@ -149,7 +149,7 @@ async function pairedAdapters() {
 function waitForAdapter(ms) {
   return new Promise((resolve) => {
     const t = setTimeout(() => done(false), ms);
-    const on = (e) => ADAPTERS.some((a) => a.productId === e.device.productId) && done(true);
+    const on = (e) => ADAPTERS.some((a) => a.vendorId === e.device.vendorId && a.productId === e.device.productId) && done(true);
     function done(v) {
       clearTimeout(t);
       navigator.usb.removeEventListener('connect', on);
@@ -168,7 +168,7 @@ async function connect(fromClick) {
       } catch (e) {
         if (e.name === 'NotFoundError') {
           phase = 'start';
-          return card('No adapter chosen. Plug in the T4U and click Connect.', { connect: true });
+          return card('No adapter chosen. Plug in the T3U or T4U and click Connect.', { connect: true });
         }
         throw e;
       }
@@ -204,7 +204,16 @@ async function connect(fromClick) {
       await cmd('close');
       return fail('The adapter is running at USB 2, which is too slow. Plug it into a USB 3 port (usually blue) and replug it.');
     }
-    startScan('card', store.get('lastMhz', 0));
+    if (DEBUG) {
+      // Direct capture without a scan. Override our known R1 FPV carrier with ?debug&mhz=NNNN.
+      const candidate = Number(new URLSearchParams(location.search).get('mhz'));
+      const directMhz = Number.isFinite(candidate) && candidate >= 5300 && candidate <= 6000 ? candidate : 5658.37;
+      const tune = await cmd('watch ' + directMhz);
+      if (!tune.ok) return fail('Direct tune failed: ' + tune.text);
+      setPhase('watching');
+    } else {
+      startScan('card', store.get('lastMhz', 0));
+    }
   } catch (e) {
     switching = false;
     fail(`Could not connect: ${e.message ?? e}`);
@@ -395,7 +404,7 @@ wake();
 
 // ---- unplug ----
 navigator.usb?.addEventListener('disconnect', (e) => {
-  if (switching || phase === 'start' || !ADAPTERS.some((a) => a.productId === e.device.productId)) return;
+  if (switching || phase === 'start' || !ADAPTERS.some((a) => a.vendorId === e.device.vendorId && a.productId === e.device.productId)) return;
   cmd('close');
   fail('The adapter was unplugged. Plug it back in and click Connect.');
 });
