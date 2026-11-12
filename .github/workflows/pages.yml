@@ -1,11 +1,11 @@
-# The web version (web/, scripts/build-web.sh) on GitHub Pages, rebuilt on every push to main that touches it.
+# Experimental T3U web version on GitHub Pages, built from the t3u-web branch.
 # Pages cannot send the COOP/COEP headers the WebAssembly threads need: web/site/coi-serviceworker.js adds them
 # (the first visit reloads once).
 name: pages
 
 on:
   push:
-    branches: [main]
+    branches: [t3u-web]
     paths:
       - 'web/**'
       - 'native/**'
